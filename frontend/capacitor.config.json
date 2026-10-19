@@ -1,0 +1,9 @@
+{
+  "appId": "com.skd.chickenbilling",
+  "appName": "Sri Kanaka Durga Chicken Billing",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "server": {
+    "cleartext": true
+  }
+}

@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.skd.chickenbilling",
+    "sha256_cert_fingerprints": ["93:F5:7C:FD:51:2F:04:CD:9D:5A:5B:AC:E4:6C:EA:49:CA:F3:69:DB:D7:BA:AA:7A:D8:E3:4B:58:EA:D5:74:F3"]
+  }
+}]
