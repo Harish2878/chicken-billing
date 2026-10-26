@@ -30,10 +30,52 @@ import {
   User,
   Lock,
   EyeOff,
-  Smartphone
+  Smartphone,
+  QrCode,
+  Copy,
+  ExternalLink,
+  Send
 } from "lucide-react";
 
 const API = "/api";
+
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, errorInfo) {
+    console.error("ErrorBoundary caught an error:", error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: "40px 20px", textAlign: "center", background: "#ffffff", borderRadius: "14px", margin: "20px auto", maxWidth: "500px", boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }}>
+          <div style={{ width: "54px", height: "54px", borderRadius: "50%", background: "#fee2e2", color: "#dc2626", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px auto" }}>
+            <AlertCircle size={28} />
+          </div>
+          <h3 style={{ fontSize: "18px", color: "#0f172a", marginBottom: "8px", fontWeight: "800" }}>Unable to Open Page</h3>
+          <p style={{ color: "#64748b", fontSize: "14px", lineHeight: "1.5", marginBottom: "20px" }}>
+            {String(this.state.error?.message || "An unexpected error occurred while loading this view.")}
+          </p>
+          <button
+            onClick={() => {
+              this.setState({ hasError: false });
+              window.location.reload();
+            }}
+            style={{ background: "#ea580c", color: "#ffffff", border: "none", padding: "12px 24px", borderRadius: "10px", fontWeight: "700", cursor: "pointer", fontSize: "14px", boxShadow: "0 2px 8px rgba(234,88,12,0.3)" }}
+          >
+            Reload Page
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 export default function App() {
   const [token, setToken] = useState(() => localStorage.getItem("cb_token"));
@@ -254,45 +296,48 @@ export default function App() {
         </header>
 
         <main className="content-area">
-          {page === "dashboard" && (
-            <DashboardView
-              token={token}
-              isSupplier={isSupplier}
-              onNavigate={setPage}
-              onViewInvoice={setSelectedInvoice}
-            />
-          )}
+          <ErrorBoundary>
+            {page === "dashboard" && (
+              <DashboardView
+                token={token}
+                isSupplier={isSupplier}
+                onNavigate={setPage}
+                onViewInvoice={setSelectedInvoice}
+              />
+            )}
 
-          {page === "supply" && isSupplier && (
-            <DailySupplyView
-              token={token}
-              onSupplySaved={(newSupply) => {
-                showToast(`Bill ${newSupply.billNumber} created successfully! Total: ₹${newSupply.totalBill}`);
-                setPage("bills");
-              }}
-            />
-          )}
+            {page === "supply" && isSupplier && (
+              <DailySupplyView
+                token={token}
+                onSupplySaved={(newSupply) => {
+                  showToast(`Bill ${newSupply.billNumber} created successfully! Total: ₹${newSupply.totalBill}`);
+                  setPage("bills");
+                }}
+              />
+            )}
 
-          {page === "bills" && (
-            <BillsView
-              token={token}
-              isSupplier={isSupplier}
-              onViewInvoice={setSelectedInvoice}
-              showToast={showToast}
-            />
-          )}
+            {page === "bills" && (
+              <BillsView
+                token={token}
+                isSupplier={isSupplier}
+                onViewInvoice={setSelectedInvoice}
+                showToast={showToast}
+                onPayBill={(b) => setPage("payments")}
+              />
+            )}
 
-          {page === "payments" && (
-            <PaymentsView token={token} isSupplier={isSupplier} showToast={showToast} />
-          )}
+            {page === "payments" && (
+              <PaymentsView token={token} isSupplier={isSupplier} showToast={showToast} />
+            )}
 
-          {page === "balance" && (
-            <PreviousBalanceView token={token} isSupplier={isSupplier} showToast={showToast} />
-          )}
+            {page === "balance" && (
+              <PreviousBalanceView token={token} isSupplier={isSupplier} showToast={showToast} />
+            )}
 
-          {page === "reports" && <WeeklyReportsView token={token} />}
+            {page === "reports" && <WeeklyReportsView token={token} />}
 
-          {page === "whatsapp" && <WhatsAppShareView token={token} />}
+            {page === "whatsapp" && <WhatsAppShareView token={token} />}
+          </ErrorBoundary>
         </main>
       </div>
 
@@ -1148,7 +1193,7 @@ function DailySupplyView({ token, onSupplySaved }) {
 // =========================================================================
 // 4. BILLS VIEW COMPONENT
 // =========================================================================
-function BillsView({ token, isSupplier, onViewInvoice, showToast }) {
+function BillsView({ token, isSupplier, onViewInvoice, showToast, onPayBill }) {
   const [bills, setBills] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -1398,6 +1443,16 @@ Sri Kanaka Durga Chicken Center`;
                         >
                           <Eye size={15} />
                         </button>
+                        {onPayBill && (
+                          <button
+                            className="action-icon-btn"
+                            style={{ color: "#ea580c" }}
+                            title={isSupplier ? "Record Payment for this Bill" : "Pay via UPI"}
+                            onClick={() => onPayBill(b)}
+                          >
+                            <CreditCard size={15} />
+                          </button>
+                        )}
                         <button
                           className="action-icon-btn"
                           title="Download Invoice"
@@ -1442,6 +1497,8 @@ Sri Kanaka Durga Chicken Center`;
 // 5. INVOICE MODAL COMPONENT (View & Print)
 // =========================================================================
 function InvoiceModal({ invoice, onClose }) {
+  const upiUrl = `upi://pay?pa=9550714566@upi&pn=${encodeURIComponent("Sri Kanaka Durga Chicken Center")}&am=${Number(invoice.total_bill).toFixed(2)}&cu=INR&tn=${encodeURIComponent(`Bill ${invoice.bill_number}`)}`;
+
   const handlePrint = () => {
     window.print();
   };
@@ -1468,6 +1525,14 @@ Status: ${invoice.payment_status || "Pending"}
         <div className="modal-actions-bar no-print">
           <div className="modal-action-title">Delivery Challan & Invoice Preview</div>
           <div className="btn-group">
+            <a
+              href={upiUrl}
+              className="btn-action-modal"
+              style={{ background: "#16a34a", color: "#ffffff", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "6px", fontWeight: "700" }}
+              title="Open Google Pay / PhonePe / Paytm"
+            >
+              <Smartphone size={16} /> Pay via UPI
+            </a>
             <button className="btn-action-modal print-btn" onClick={handlePrint}>
               <Printer size={16} /> Print Bill
             </button>
@@ -1585,25 +1650,50 @@ Status: ${invoice.payment_status || "Pending"}
 function PaymentsView({ token, isSupplier, showToast }) {
   const [data, setData] = useState({ payments: [], summary: {} });
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
 
+  // Supplier Record Form State
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10));
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState("UPI");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // Online UPI Payment State (For Novel Hotel or Supplier showing QR)
+  const [upiAmount, setUpiAmount] = useState("");
+  const [copiedUpi, setCopiedUpi] = useState(false);
+  const [showQrCode, setShowQrCode] = useState(true);
+
   const loadPayments = () => {
     setLoading(true);
+    setLoadError(null);
     fetch(`${API}/payments`, {
       headers: { Authorization: `Bearer ${token}` }
     })
-      .then((r) => r.json())
+      .then(async (r) => {
+        if (r.status === 401) {
+          localStorage.removeItem("cb_token");
+          localStorage.removeItem("cb_user");
+          window.location.reload();
+          return null;
+        }
+        if (!r.ok) {
+          throw new Error(`Server returned error code ${r.status}`);
+        }
+        return r.json();
+      })
       .then((res) => {
-        setData(res);
+        if (res) {
+          setData({
+            payments: Array.isArray(res.payments) ? res.payments : [],
+            summary: res.summary || {}
+          });
+        }
         setLoading(false);
       })
       .catch((err) => {
-        console.error(err);
+        console.error("Payments load error:", err);
+        setLoadError(err.message || "Failed to load payment records");
         setLoading(false);
       });
   };
@@ -1611,6 +1701,41 @@ function PaymentsView({ token, isSupplier, showToast }) {
   useEffect(() => {
     loadPayments();
   }, [token]);
+
+  const pendingBalance = Number(data?.summary?.pendingBalance || 0);
+
+  // Set default UPI amount to pending balance once loaded
+  useEffect(() => {
+    if (pendingBalance > 0 && !upiAmount) {
+      setUpiAmount(String(Math.round(pendingBalance)));
+    }
+  }, [pendingBalance]);
+
+  const currentUpiAmt = parseFloat(upiAmount) > 0 ? parseFloat(upiAmount) : (pendingBalance > 0 ? pendingBalance : 1000);
+  const upiId = "9550714566@upi";
+  const payeeName = "Sri Kanaka Durga Chicken Center";
+  const upiDeepLink = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(payeeName)}&am=${currentUpiAmt}&cu=INR&tn=${encodeURIComponent("Novel Hotel Chicken Bill Settlement")}`;
+  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=8&data=${encodeURIComponent(upiDeepLink)}`;
+
+  const handleCopyUpi = () => {
+    navigator.clipboard?.writeText(upiId);
+    setCopiedUpi(true);
+    setTimeout(() => setCopiedUpi(false), 2500);
+    showToast("UPI ID copied to clipboard: 9550714566@upi");
+  };
+
+  const handleWhatsAppReceipt = () => {
+    const text = `*Chicken Payment Confirmation*
+From: Novel Hotel
+To: Sri Kanaka Durga Chicken Center
+---------------------------------
+Amount: ₹${Number(currentUpiAmt).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+Date: ${new Date().toISOString().slice(0, 10)}
+Mode: UPI / Online Payment
+---------------------------------
+Please verify and update our ledger balance. Thank you!`;
+    window.open(`https://api.whatsapp.com/send?phone=919550714566&text=${encodeURIComponent(text)}`, "_blank");
+  };
 
   const handleSubmitPayment = async (e) => {
     e.preventDefault();
@@ -1669,21 +1794,33 @@ function PaymentsView({ token, isSupplier, showToast }) {
   };
 
   const summaryCards = [
-    { label: "Total Billed", val: data.summary.totalBilled || 0, color: "blue" },
-    { label: "Total Paid", val: data.summary.totalPaid || 0, color: "green" },
-    { label: "Previous Balance", val: data.summary.previousBalance || 0, color: "amber" },
-    { label: "Current Pending Balance", val: data.summary.pendingBalance || 0, color: "red" }
+    { label: "Total Billed", val: data?.summary?.totalBilled || 0, color: "blue" },
+    { label: "Total Paid", val: data?.summary?.totalPaid || 0, color: "green" },
+    { label: "Previous Balance", val: data?.summary?.previousBalance || 0, color: "amber" },
+    { label: "Current Pending Balance", val: data?.summary?.pendingBalance || 0, color: "red" }
   ];
 
   return (
     <div className="payments-view-container">
       <div className="section-title-wrap">
         <div>
-          <span className="welcome-eyebrow">FINANCIAL LEDGER</span>
+          <span className="welcome-eyebrow">FINANCIAL LEDGER & SETTLEMENT</span>
           <h2>Payment Management</h2>
-          <p>Track cash, UPI, and bank transfer receipts against chicken billing invoices.</p>
+          <p>Instant UPI settlement, cash & bank transfers for Sri Kanaka Durga ➔ Novel Hotel billing.</p>
         </div>
       </div>
+
+      {loadError && (
+        <div style={{ background: "#fee2e2", border: "1px solid #f87171", borderRadius: "10px", padding: "14px 18px", marginBottom: "20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", color: "#991b1b", fontSize: "14px", fontWeight: "600" }}>
+            <AlertCircle size={20} />
+            <span>Could not load payments: {loadError}</span>
+          </div>
+          <button onClick={loadPayments} style={{ background: "#b91c1c", color: "#fff", border: "none", padding: "6px 14px", borderRadius: "6px", cursor: "pointer", fontWeight: "700", fontSize: "13px" }}>
+            Retry
+          </button>
+        </div>
+      )}
 
       {/* 4 Summary Cards */}
       <div className="stat-cards-grid">
@@ -1695,7 +1832,7 @@ function PaymentsView({ token, isSupplier, showToast }) {
             </div>
             <div className="stat-sub">
               {sc.label === "Current Pending Balance"
-                ? "Previous Balance + Billed − Paid"
+                ? "Opening Balance + Billed − Paid"
                 : "Cumulative account balance"}
             </div>
           </div>
@@ -1703,85 +1840,270 @@ function PaymentsView({ token, isSupplier, showToast }) {
       </div>
 
       <div className="dashboard-grid-2">
-        {/* Record Payment Form (Supplier Only) */}
+        {/* LEFT PANEL: UPI Pay Portal (Customer) or Record Form (Supplier) */}
         {isSupplier ? (
-          <form className="panel form-panel" onSubmit={handleSubmitPayment}>
+          <div className="panel form-panel">
             <div className="form-title-bar">
-              <h3>Record Supplier Payment</h3>
-              <span className="form-sub-tag">Received from Novel Hotel</span>
+              <div>
+                <h3>Record Supplier Payment</h3>
+                <span className="form-sub-tag">Received from Novel Hotel</span>
+              </div>
+              <button
+                type="button"
+                className="btn-action-modal"
+                style={{ padding: "6px 10px", fontSize: "12px", gap: "5px" }}
+                onClick={() => setShowQrCode(!showQrCode)}
+              >
+                <QrCode size={14} />
+                <span>{showQrCode ? "Hide QR" : "Show QR"}</span>
+              </button>
             </div>
 
-            <div className="form-group">
-              <label>Payment Date *</label>
-              <input
-                type="date"
-                required
-                value={paymentDate}
-                onChange={(e) => setPaymentDate(e.target.value)}
-                className="input-field"
-              />
+            {showQrCode && (
+              <div style={{ background: "#f8fafc", border: "1px dashed #cbd5e1", borderRadius: "10px", padding: "14px", marginBottom: "16px", textAlign: "center" }}>
+                <span style={{ fontSize: "11px", fontWeight: "800", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px", display: "block", marginBottom: "6px" }}>
+                  Show QR to Customer at Delivery
+                </span>
+                <img
+                  src={qrCodeUrl}
+                  alt="UPI QR Code"
+                  style={{ width: "160px", height: "160px", borderRadius: "8px", margin: "0 auto 8px auto", display: "block", border: "1px solid #e2e8f0" }}
+                />
+                <div style={{ fontSize: "13px", fontWeight: "700", color: "#0f172a" }}>
+                  UPI: <span style={{ color: "#ea580c" }}>{upiId}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCopyUpi}
+                  style={{ background: "#e2e8f0", border: "none", padding: "4px 10px", borderRadius: "6px", fontSize: "11px", fontWeight: "700", cursor: "pointer", marginTop: "6px" }}
+                >
+                  {copiedUpi ? "Copied!" : "Copy UPI ID"}
+                </button>
+              </div>
+            )}
+
+            <form onSubmit={handleSubmitPayment}>
+              <div className="form-group">
+                <label>Payment Date *</label>
+                <input
+                  type="date"
+                  required
+                  value={paymentDate}
+                  onChange={(e) => setPaymentDate(e.target.value)}
+                  className="input-field"
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Amount Received (₹) *</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="1"
+                  required
+                  placeholder="e.g. 5000"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  className="input-field"
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Payment Method *</label>
+                <select
+                  value={method}
+                  onChange={(e) => setMethod(e.target.value)}
+                  className="input-field"
+                >
+                  <option value="Cash">Cash</option>
+                  <option value="UPI">UPI (Google Pay / PhonePe / Paytm)</option>
+                  <option value="Bank Transfer">Bank Transfer (NEFT / IMPS)</option>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label>Transaction Notes / Reference</label>
+                <textarea
+                  placeholder="e.g. UPI Ref: 4291882910 or Cash paid by Ravi Kumar"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  className="input-textarea"
+                  rows="3"
+                />
+              </div>
+
+              <button type="submit" disabled={saving} className="btn-primary-lg">
+                <CreditCard size={18} />
+                <span>{saving ? "Recording..." : "Record Payment & Update Balance"}</span>
+              </button>
+            </form>
+          </div>
+        ) : (
+          /* Novel Hotel Customer View: Complete UPI Online Payment Portal */
+          <div className="panel" style={{ background: "#ffffff", border: "1px solid #e2e8f0" }}>
+            <div className="form-title-bar" style={{ marginBottom: "16px" }}>
+              <div>
+                <span className="welcome-eyebrow" style={{ color: "#ea580c" }}>ONLINE UPI BILL SETTLEMENT</span>
+                <h3 style={{ margin: "2px 0 0 0" }}>Pay Sri Kanaka Durga Center</h3>
+                <span className="form-sub-tag">Direct UPI Transfer via PhonePe / GPay / Paytm</span>
+              </div>
             </div>
 
-            <div className="form-group">
-              <label>Amount Received (₹) *</label>
+            {/* Pending Balance Callout */}
+            <div style={{ background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: "12px", padding: "14px", marginBottom: "18px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <span style={{ fontSize: "11px", fontWeight: "800", color: "#c2410c", textTransform: "uppercase" }}>Current Balance Due</span>
+                <div style={{ fontSize: "22px", fontWeight: "900", color: "#9a3412" }}>
+                  ₹{Number(pendingBalance).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                </div>
+              </div>
+              <span style={{ background: "#ea580c", color: "#fff", padding: "4px 10px", borderRadius: "20px", fontSize: "11px", fontWeight: "700" }}>
+                Novel Hotel
+              </span>
+            </div>
+
+            {/* Preset Amount Pills */}
+            <div style={{ marginBottom: "14px" }}>
+              <label style={{ fontSize: "12px", fontWeight: "700", color: "#475569", display: "block", marginBottom: "6px" }}>
+                Choose Payment Amount:
+              </label>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                {pendingBalance > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setUpiAmount(String(Math.round(pendingBalance)))}
+                    style={{
+                      background: upiAmount === String(Math.round(pendingBalance)) ? "#ea580c" : "#f1f5f9",
+                      color: upiAmount === String(Math.round(pendingBalance)) ? "#fff" : "#334155",
+                      border: "none",
+                      padding: "6px 12px",
+                      borderRadius: "8px",
+                      fontSize: "12px",
+                      fontWeight: "700",
+                      cursor: "pointer"
+                    }}
+                  >
+                    Full Balance (₹{Math.round(pendingBalance)})
+                  </button>
+                )}
+                {[20000, 10000, 5000].map((amt) => (
+                  <button
+                    key={amt}
+                    type="button"
+                    onClick={() => setUpiAmount(String(amt))}
+                    style={{
+                      background: upiAmount === String(amt) ? "#ea580c" : "#f1f5f9",
+                      color: upiAmount === String(amt) ? "#fff" : "#334155",
+                      border: "none",
+                      padding: "6px 12px",
+                      borderRadius: "8px",
+                      fontSize: "12px",
+                      fontWeight: "700",
+                      cursor: "pointer"
+                    }}
+                  >
+                    ₹{amt.toLocaleString("en-IN")}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Custom Amount Input */}
+            <div className="form-group" style={{ marginBottom: "14px" }}>
+              <label>Amount to Pay (₹)</label>
               <input
                 type="number"
-                step="0.01"
+                step="1"
                 min="1"
-                required
-                placeholder="e.g. 5000"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                value={upiAmount}
+                onChange={(e) => setUpiAmount(e.target.value)}
+                placeholder="Enter custom amount (e.g. 5000)"
                 className="input-field"
+                style={{ fontSize: "16px", fontWeight: "700" }}
               />
             </div>
 
-            <div className="form-group">
-              <label>Payment Method *</label>
-              <select
-                value={method}
-                onChange={(e) => setMethod(e.target.value)}
-                className="input-field"
-              >
-                <option value="Cash">Cash</option>
-                <option value="UPI">UPI (Google Pay / PhonePe / Paytm)</option>
-                <option value="Bank Transfer">Bank Transfer (NEFT / IMPS)</option>
-              </select>
-            </div>
+            {/* Pay via UPI App Mobile Deep Link Button */}
+            <a
+              href={upiDeepLink}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "10px",
+                background: "linear-gradient(135deg, #16a34a, #15803d)",
+                color: "#ffffff",
+                padding: "14px 20px",
+                borderRadius: "10px",
+                fontWeight: "800",
+                fontSize: "15px",
+                textDecoration: "none",
+                marginBottom: "12px",
+                boxShadow: "0 4px 12px rgba(22,163,74,0.3)"
+              }}
+            >
+              <Smartphone size={18} />
+              <span>⚡ Open Google Pay / PhonePe / Paytm</span>
+              <ExternalLink size={16} />
+            </a>
 
-            <div className="form-group">
-              <label>Transaction Notes / Reference</label>
-              <textarea
-                placeholder="e.g. UPI Ref: 4291882910 or Cheque #1234"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                className="input-textarea"
-                rows="3"
+            {/* Interactive QR Code for Scanning */}
+            <div style={{ textAlign: "center", padding: "14px", background: "#f8fafc", borderRadius: "10px", border: "1px solid #e2e8f0", marginBottom: "14px" }}>
+              <span style={{ fontSize: "11px", fontWeight: "800", color: "#64748b", textTransform: "uppercase", display: "block", marginBottom: "8px" }}>
+                Scan to Pay ₹{Number(currentUpiAmt).toLocaleString("en-IN")}
+              </span>
+              <img
+                src={qrCodeUrl}
+                alt="Scan to Pay QR"
+                style={{ width: "170px", height: "170px", borderRadius: "8px", margin: "0 auto 8px auto", display: "block", border: "1px solid #cbd5e1" }}
               />
+              <div style={{ fontSize: "13px", fontWeight: "700", color: "#334155", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
+                <span>UPI ID: <b style={{ color: "#ea580c" }}>{upiId}</b></span>
+                <button
+                  type="button"
+                  onClick={handleCopyUpi}
+                  style={{ background: "#e2e8f0", border: "none", padding: "3px 8px", borderRadius: "4px", fontSize: "11px", fontWeight: "700", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}
+                >
+                  <Copy size={12} />
+                  <span>{copiedUpi ? "Copied!" : "Copy"}</span>
+                </button>
+              </div>
             </div>
 
-            <button type="submit" disabled={saving} className="btn-primary-lg">
-              <CreditCard size={18} />
-              <span>{saving ? "Recording..." : "Record Payment & Update Balance"}</span>
+            {/* WhatsApp Receipt Notify Button */}
+            <button
+              type="button"
+              onClick={handleWhatsAppReceipt}
+              style={{
+                width: "100%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "8px",
+                background: "#25D366",
+                color: "#ffffff",
+                border: "none",
+                padding: "12px",
+                borderRadius: "10px",
+                fontWeight: "700",
+                fontSize: "14px",
+                cursor: "pointer"
+              }}
+            >
+              <Share2 size={16} />
+              <span>Send Payment Screenshot via WhatsApp</span>
             </button>
-          </form>
-        ) : (
-          <div className="panel view-only-card">
-            <h3>Novel Hotel Payment Information</h3>
-            <p>
-              Payments made by Novel Hotel are verified and recorded by Sri Kanaka Durga Chicken Center.
-            </p>
-            <div className="calc-note">
-              <span>Novel Hotel has view-only access to billing data and payment receipts.</span>
-            </div>
           </div>
         )}
 
-        {/* Payment History Table */}
+        {/* RIGHT PANEL: Payment History Ledger */}
         <div className="panel">
           <div className="panel-header">
-            <h3>Payment Receipts Ledger</h3>
-            <span className="history-count">{data.payments?.length || 0} Records</span>
+            <div>
+              <h3>Payment Receipts Ledger</h3>
+              <p>Historical settlements from Novel Hotel</p>
+            </div>
+            <span className="history-count">{data?.payments?.length || 0} Records</span>
           </div>
 
           <div className="table-responsive">
@@ -1800,7 +2122,7 @@ function PaymentsView({ token, isSupplier, showToast }) {
                   <tr>
                     <td colSpan={isSupplier ? 5 : 4} className="empty-text">Loading payments...</td>
                   </tr>
-                ) : data.payments?.length > 0 ? (
+                ) : (data?.payments?.length || 0) > 0 ? (
                   data.payments.map((p) => (
                     <tr key={p.id}>
                       <td>{String(p.payment_date).slice(0, 10)}</td>
